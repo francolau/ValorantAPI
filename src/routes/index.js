@@ -2,6 +2,10 @@ const { Router } = require("express")
 const fetch = require('node-fetch')
 const fs = require('fs')
 const path = require('path')
+const dotenv = require('dotenv')
+
+dotenv.config()
+
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const valId = 'ab5369a0-ada5-5221-a681-2f7f5ac5f4ff'
@@ -10,7 +14,9 @@ const router = Router();
 
 router.get('/', async (req,res) => {
     try{
-        const filePath = 'C:/Users/Franc/AppData/Local/Riot Games/Riot Client/Config/lockfile'
+        const appDataPath = process.env.LOCALAPPDATA;
+        const filePath = path.join(appDataPath, 'Riot Games', 'Riot Client', 'Config', 'lockfile');
+        // const filePath = 'C:/Users/Franc/AppData/Local/Riot Games/Riot Client/Config/lockfile'
     
     fs.readFile(filePath, 'utf8', async (err,data) => {
         if(err) {
@@ -19,7 +25,7 @@ router.get('/', async (req,res) => {
             return
         }
         
-        const lines = data.split('\n'); // Separar el contenido en líneas
+        const lines = data.split('\n');
         
         const pw = lines.map(line => {
             const cleanedLine = line.trim();
@@ -382,9 +388,6 @@ router.get('/test', async (req,res) => {
     } catch(err) {
         console.log(err)
     }
-
-
-
 
     // similarChar.forEach( async (char, index) =>{
     //     let puuid
