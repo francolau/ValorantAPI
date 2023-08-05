@@ -87,20 +87,22 @@ router.get('/getMatchInfo', async (req,res) => {
         const response = await fetch(`https://glz-latam-1.na.a.pvp.net/core-game/v1/matches/${global.matchId}`, {
             headers: {'Content-Type': 'application/json', 'X-Riot-Entitlements-JWT': `${entitlementToken}`, 'Authorization': `Bearer ${bearerToken}`}
         })
-        .then((data) => data.json())
-        .then((info) => matchInfo = info)
+        
+        matchInfo = await response.json()
 
-        let similarCharacters = matchInfo.Players.map(player => player.CharacterID)
-        .filter((characterID, index, self) => self.indexOf(characterID) !== index);
-
-        res.json({matchInfo, similarCharacters})
+        let players = await Promise.all(matchInfo.Players.map(async (player) => {
+            const responsePlayers = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${player.Subject}`)
+            return responsePlayers.json()
+                }))
+                
+        res.json({matchInfo, players})
     }
     catch (err) {
         console.log(err)
     }
 })
 
-router.get('/test', (req,res) => {
+router.get('/test', async (req,res) => {
 
     const matchInfo = {
     "matchInfo": {
@@ -365,10 +367,38 @@ router.get('/test', (req,res) => {
       }
     }
 
-    let similarChar = matchInfo.matchInfo.Players.map(player => player.CharacterID)
-    .filter((characterID, index, self) => self.indexOf(characterID) !== index);
+    // let similarChar = matchInfo.matchInfo.Players.map(player =>  player.CharacterID)
+    // .filter((characterID, index, self) => self.indexOf(characterID) !== index);
 
-    res.send({'hello': 'world'})
+    let players = []
+
+    try{
+        let players = await Promise.all(matchInfo.matchInfo.Players.map(async (player) => {
+            const responsePlayers = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${player.Subject}`);
+            return responsePlayers.json();
+          }));
+
+          res.json(players)
+    } catch(err) {
+        console.log(err)
+    }
+
+
+
+
+    // similarChar.forEach( async (char, index) =>{
+    //     let puuid
+    // playersInfo = [...playersInfo, matchInfo.matchInfo.Players.find((player) => player.CharacterID === char )]
+    //         try{
+    //             const response = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${playersInfo[index].Subject}`)
+    //             .then((data) => data.json())
+    //             .then((info) => puuid = info)
+    //             console.log(puuid)
+    //         }catch(err){
+    //             console.log(err)
+    //         }
+    //     }
+    // )
 })
 
 
