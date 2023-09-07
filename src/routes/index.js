@@ -1,4 +1,4 @@
-const { Router } = require("express")
+const { Router, response } = require("express")
 const fetch = require('node-fetch')
 const fs = require('fs')
 const path = require('path')
@@ -10,132 +10,115 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const router = Router();
 
-router.get('/', async (req,res) => {
-    try{
-        const appDataPath = process.env.LOCALAPPDATA;
-        const filePath = path.join(appDataPath, 'Riot Games', 'Riot Client', 'Config', 'lockfile');
-    
-    fs.readFile(filePath, 'utf8', async (err,data) => {
-        if(err) {
-            console.error('error', err);
-            res.status(500).send('Error al leer')
-            return
-        }
-        
-        const lines = data.split('\n');
-        
-        const pw = lines.map(line => {
-            const cleanedLine = line.trim();
-            const parts = cleanedLine.split(':');
-            return parts[3];
-        });
-
-        const port = lines.map(line => {
-            const cleanedLine = line.trim();
-            const parts = cleanedLine.split(':');
-            return parts[2];
-        });
-
-        const authKey = 'riot:' + pw[0]
-        let buff = Buffer(authKey)
-        let authToken = buff.toString('base64')
-        
-        let authKeys 
-        
-        
-        const response = await fetch(`https://127.0.0.1:${port[0]}/entitlements/v1/token`, {
-            headers: {'Content-Type': 'application/json', 'Authorization': `Basic ${authToken}`}
-        })
-
-        authKeys = await response.json()
-        
-        global.authKeys = await authKeys
-    
-        res.json(authKeys)
-    })  
-        }
-            catch(err) {
-                console.log(err)
-        }
-    
-})
-
-router.get('/getMatch', async (req, res) => {
-    let bearerToken = global.authKeys.accessToken
-    let entitlementToken = global.authKeys.token
-    let playerId = global.authKeys.subject
-
-    let matchId
-    
+router.get('/', async (req, res) => {
     try {
-        const response = await fetch(`https://glz-latam-1.na.a.pvp.net/core-game/v1/players/${playerId}`, {
-            headers: {'Content-Type': 'application/json', 'X-Riot-Entitlements-JWT': `${entitlementToken}`, 'Authorization': `Bearer ${bearerToken}`}
-        })
+      // Obtener la ruta del archivo de configuración
+      const appDataPath = process.env.LOCALAPPDATA;
+      const filePath = path.join(appDataPath, 'Riot Games', 'Riot Client', 'Config', 'lockfile');
+      
+      // Leer el archivo de configuración
+      fs.readFile(filePath, 'utf8', async (err, data) => {
+          if (err) {
+              console.error('Error:', err);
+              res.status(500).send('Error al leer el archivo de configuración');
+              return;
+            }
+            // Dividir las líneas del archivo
+            const lines = data.split('\n');
+            
+            // Obtener contraseñas y puertos
+            const pw = lines.map(line => line.trim().split(':')[3]);
+            const port = lines.map(line => line.trim().split(':')[2]);
+            
+            // Construir la clave de autenticación y token
+            const authKey = 'riot:' + pw[0];
+            const buff = Buffer.from(authKey);
+            const authToken = buff.toString('base64');
+            
+            // Variables para almacenar la información del juego
+            let authJson
+            let matchId 
+            let matchInfo 
+            let matchPlayers 
+            let mainPlayer;
+            let mainPlayerTeamID;
+            let allies;
+            let enemies;
+            let alliesDetails;
+            let enemiesDetails;
+  
+        // Obtener token de autenticación
+        try {
+          const response = await fetch(`https://127.0.0.1:${port[0]}/entitlements/v1/token`, {
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${authToken}` }
+          });
+  
+          authJson = await response.json();
+  
+          // Almacenar las claves de autenticación
+          const authKeys = {
+            entitlementToken: authJson.token,
+            bearerToken: authJson.accessToken,
+            playerId: authJson.subject
+          };
+  
+          // Obtener el ID del partido
+          try {
+            const response = await fetch(`https://glz-latam-1.na.a.pvp.net/core-game/v1/players/${authKeys.playerId}`, {
+              headers: { 'Content-Type': 'application/json', 'X-Riot-Entitlements-JWT': `${authKeys.entitlementToken}`, 'Authorization': `Bearer ${authKeys.bearerToken}` }
+            });
+  
+            matchId = await response.json();
+  
+            // Obtener información del partido
+            try {
+              const response = await fetch(`https://glz-latam-1.na.a.pvp.net/core-game/v1/matches/${matchId.MatchID}`, {
+                headers: { 'Content-Type': 'application/json', 'X-Riot-Entitlements-JWT': `${authKeys.entitlementToken}`, 'Authorization': `Bearer ${authKeys.bearerToken}` }
+              });
+  
+              matchInfo = await response.json();
+  
+              // Encontrar al jugador principal y su equipo
+              mainPlayer = matchInfo.Players.find(player => player.Subject === authKeys.playerId);
+              mainPlayerTeamID = mainPlayer ? mainPlayer.TeamID : null;
+  
+              // Filtrar jugadores de tu equipo y enemigos
+              allies = matchInfo.Players.filter(player => player.TeamID === mainPlayerTeamID);
+              enemies = matchInfo.Players.filter(player => player.TeamID !== mainPlayerTeamID);
+  
+              // Obtener información de los jugadores en paralelo
+              async function getPlayerInfo(subject) {
+                const response = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${subject}`);
+                return response.json();
+              }
+  
+              const playerRequests = [...allies, ...enemies].map(player => getPlayerInfo(player.Subject));
+              matchPlayers = await Promise.all(playerRequests);
+  
+              // Separar la información en aliados y enemigos
+              alliesDetails = matchPlayers.slice(0, allies.length);
+              enemiesDetails = matchPlayers.slice(enemies.length);
+  
+              // Responder con la información recopilada
+              res.json({ authKeys, matchId: matchId.MatchID || 'No se encontró un partido', matchInfo, matchPlayers: { alliesDetails, enemiesDetails } });
 
-        matchId = await response.json()
-
-        global.matchId = matchId.MatchID
-
-        res.json({matchId})
+            } catch (err) {
+              console.log('Error al obtener información del partido:', err);
+              res.status(500).send('Error al obtener información del partido');
+            }
+          } catch (err) {
+            console.log('Error al obtener el ID del partido:', err);
+            res.status(500).send('Error al obtener el ID del partido');
+          }
+        } catch (err) {
+          console.log('Error al obtener el token de autenticación:', err);
+          res.status(500).send('Error al obtener el token de autenticación');
+        }
+      });
+    } catch (err) {
+      console.log('Error general:', err);
+      res.status(500).send('Error general');
     }
-    catch (err) {
-        console.log(err)
-    }
-})
-
-router.get('/getMatchInfo', async (req,res) => {
-    let matchInfo
-    let bearerToken = global.authKeys.accessToken
-    let entitlementToken = global.authKeys.token
-
-    try{
-        const response = await fetch(`https://glz-latam-1.na.a.pvp.net/core-game/v1/matches/${global.matchId}`, {
-            headers: {'Content-Type': 'application/json', 'X-Riot-Entitlements-JWT': `${entitlementToken}`, 'Authorization': `Bearer ${bearerToken}`}
-        })
-        
-        matchInfo = await response.json()
-
-        let players = await Promise.all(matchInfo.Players.map(async (player) => {
-            const responsePlayers = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${player.Subject}`)
-            return responsePlayers.json()
-                }))
-                
-        res.json({matchInfo, players})
-    }
-    catch (err) {
-        console.log(err)
-    }
-})
-
-// router.get('/test', async (req,res) => {
-    // let similarChar = matchInfo.matchInfo.Players.map(player =>  player.CharacterID)
-    // .filter((characterID, index, self) => self.indexOf(characterID) !== index);
-    // let players = []
-    // try{
-    //     let players = await Promise.all(matchInfo.matchInfo.Players.map(async (player) => {
-    //         const responsePlayers = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${player.Subject}`);
-    //         return responsePlayers.json();
-    //       }));
-
-    //       res.json(players)
-    // } catch(err) {
-    //     console.log(err)
-    // }
-    // similarChar.forEach( async (char, index) =>{
-    //     let puuid
-    // playersInfo = [...playersInfo, matchInfo.matchInfo.Players.find((player) => player.CharacterID === char )]
-    //         try{
-    //             const response = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${playersInfo[index].Subject}`)
-    //             .then((data) => data.json())
-    //             .then((info) => puuid = info)
-    //             console.log(puuid)
-    //         }catch(err){
-    //             console.log(err)
-    //         }
-    //     }
-    // )
-  // })
-
-
+  });
 
 module.exports = router;

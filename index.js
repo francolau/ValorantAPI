@@ -17,15 +17,6 @@ app.use(express.json());
 // routes
 app.use(require('./src/routes/index'))
 
-
-// app.get("/", (req,res)=> {
-//     // res.send("Hello world")
-//     // __dirname es para usar la ruta default del repo
-//     res.sendFile(path.join(__dirname + "/index.html" ))
-// })
-
-//Min 26:09 https://www.youtube.com/watch?v=bK3AJfs7qNY
-
 // Server start
 app.listen(app.get('port'), () => {
     console.log(`Server listening on port ${app.get('port')}`)
