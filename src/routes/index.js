@@ -10,7 +10,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const router = Router();
 
-router.get('/matchInfo', async (req, res) => {
+router.get('/', async (req, res) => {
     try {
       // Obtener la ruta del archivo de configuración
       const appDataPath = process.env.LOCALAPPDATA;
