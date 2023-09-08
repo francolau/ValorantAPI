@@ -1,16 +1,16 @@
-const { Router, response } = require("express")
+const express = require("express")
 const fetch = require('node-fetch')
 const fs = require('fs')
 const path = require('path')
 const dotenv = require('dotenv')
 
+const app = express();
+
 dotenv.config()
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-const router = Router();
-
-router.get('/', async (req, res) => {
+app.get('/', async (req, res) => {
     try {
       // Obtener la ruta del archivo de configuración
       const appDataPath = process.env.LOCALAPPDATA;
@@ -36,10 +36,10 @@ router.get('/', async (req, res) => {
             const authToken = buff.toString('base64');
             
             // Variables para almacenar la información del juego
-            let authJson
-            let matchId 
-            let matchInfo 
-            let matchPlayers 
+            let authJson;
+            let matchId;
+            let matchInfo;
+            let matchPlayers;
             let mainPlayer;
             let mainPlayerTeamID;
             let allies;
@@ -79,13 +79,14 @@ router.get('/', async (req, res) => {
               matchInfo = await response.json();
   
               // Encontrar al jugador principal y su equipo
-              mainPlayer = matchInfo.Players.find(player => player.Subject === authKeys.playerId);
+              mainPlayer = matchInfo.Players?.find(player => player.Subject === authKeys.playerId);
               mainPlayerTeamID = mainPlayer ? mainPlayer.TeamID : null;
   
               // Filtrar jugadores de tu equipo y enemigos
-              allies = matchInfo.Players.filter(player => player.TeamID === mainPlayerTeamID);
-              enemies = matchInfo.Players.filter(player => player.TeamID !== mainPlayerTeamID);
-  
+              allies = matchInfo.Players?.filter(player => player.TeamID === mainPlayerTeamID);
+              enemies = matchInfo.Players?.filter(player => player.TeamID !== mainPlayerTeamID);
+
+              
               // Obtener información de los jugadores en paralelo
               async function getPlayerInfo(subject) {
                 const response = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/account/${subject}`);
@@ -94,8 +95,8 @@ router.get('/', async (req, res) => {
   
               const playerRequests = [...allies, ...enemies].map(player => getPlayerInfo(player.Subject));
               matchPlayers = await Promise.all(playerRequests);
-  
-              // Separar la información en aliados y enemigos
+              
+              // Separar la información en aliados y enemigos, matchPlayers esta previamente ordenado en blues y red
               alliesDetails = matchPlayers.slice(0, allies.length);
               enemiesDetails = matchPlayers.slice(enemies.length);
   
@@ -121,4 +122,4 @@ router.get('/', async (req, res) => {
     }
   });
 
-module.exports = router;
+module.exports = app;
